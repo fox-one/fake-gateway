@@ -198,9 +198,9 @@ func (imp *gatewayImp) private(c *gin.Context) {
 		return
 	}
 	headers := []string{
-		"fox-member-id", r.memberID,
-		"fox-merchant-id", r.merchantID,
-		"fox-wallet-id", r.walletID,
+		"Fox-Member-Id", r.memberID,
+		"Fox-Merchant-Id", r.merchantID,
+		"Fox-Wallet-Id", r.walletID,
 		"Authorization", "Bearer " + r.token,
 	}
 
