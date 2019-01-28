@@ -19,7 +19,7 @@ Fox-Wallet-ID: xxx
 /member/:service/p/*gw   # public
 /member/:service/u/*gw   # login required
 /member/:service/pin/*gw   # pin required
-/admin/:service/*gw        # no pin required & must admin login reuired
+/admin/:service/u/*gw        # no pin required & must admin login reuired
 ```
 
 其中service由FoxONE为业务分配。如otc, exchange等。
