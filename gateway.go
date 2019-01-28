@@ -171,6 +171,12 @@ func (imp *gatewayImp) public(c *gin.Context) {
 	service := c.Param("service")
 	prefix := "/member/" + service + "/p"
 
+	headers := []string{}
+
+	if merchantID := c.GetHeader("Fox-Merchant-Id"); len(merchantID) > 0 {
+		headers = append(headers, "Fox-Merchant-Id", merchantID)
+	}
+
 	method := c.Request.Method
 	uri := c.Request.URL.String()
 	body, _ := imp.extractBody(c)
@@ -182,7 +188,7 @@ func (imp *gatewayImp) public(c *gin.Context) {
 		uri = uri[:len(uri)-3]
 	}
 
-	code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body))
+	code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body), headers...)
 	if err != nil {
 		imp.failServer(c, err)
 		return
