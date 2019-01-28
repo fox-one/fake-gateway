@@ -70,8 +70,9 @@ func main() {
 				serviceHost: c.String("service_host"),
 			}
 			r.Any("/member/:service/p/*gw", imp.public)
-			r.Any("/member/:service/u/*gw", imp.private)
-			r.Any("/member/:service/pin/*gw", imp.private)
+			r.Any("/member/:service/u/*gw", imp.loginRequired(false))
+			r.Any("/member/:service/pin/*gw", imp.loginRequired(true))
+			r.Any("/admin/:service/*gw", imp.admin)
 
 			addr := fmt.Sprintf(":%d", c.Int("port"))
 			return r.Run(addr)

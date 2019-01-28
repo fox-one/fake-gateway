@@ -198,20 +198,112 @@ func (imp *gatewayImp) public(c *gin.Context) {
 	c.Writer.WriteHeader(code)
 }
 
-func (imp *gatewayImp) private(c *gin.Context) {
-	r := imp.auth(c)
+func (imp *gatewayImp) loginRequired(pinRequired bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		r := imp.auth(c)
+		if c.IsAborted() {
+			return
+		}
+		headers := []string{
+			"Fox-Member-Id", r.memberID,
+			"Fox-Merchant-Id", r.merchantID,
+			"Fox-Wallet-Id", r.walletID,
+			"Authorization", "Bearer " + r.token,
+		}
+
+		service := c.Param("service")
+		prefix := "/member/" + service
+
+		if pinRequired {
+			prefix = "/pin"
+		} else {
+			prefix = "/u"
+		}
+
+		method := c.Request.Method
+		uri := c.Request.URL.String()
+		body, _ := imp.extractBody(c)
+
+		if strings.HasPrefix(uri, prefix) {
+			uri = uri[len(prefix):]
+		}
+		if strings.HasSuffix(uri, "/gw") {
+			uri = uri[:len(uri)-3]
+		}
+
+		code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body), headers...)
+		if err != nil {
+			imp.failServer(c, err)
+			return
+		}
+
+		c.Writer.WriteHeader(code)
+		c.Writer.Write(data)
+	}
+}
+
+func (imp *gatewayImp) authAdmin(c *gin.Context) string {
+	auth := c.GetHeader("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, map[string]interface{}{
+			"code": 1105,
+			"msg":  "admin auth failed",
+		})
+		return ""
+	}
+
+	body, _ := imp.extractBody(c)
+	params, err := json.Marshal(map[string]interface{}{
+		"method": c.Request.Method,
+		"uri":    c.Request.URL.String(),
+		"body":   string(body),
+		"token":  auth[7:],
+	})
+	if err != nil {
+		imp.failServer(c, err)
+		return ""
+	}
+
+	code, data, err := imp.request(c, "POST", imp.gatewayHost+"/admin/validate", string(params))
+	if err != nil {
+		imp.failServer(c, err)
+		return ""
+	}
+
+	var r = struct {
+		Admin *struct {
+			MerchantID string `json:"merchant,omitempty"`
+		} `json:"admin,omitempty"`
+
+		Code    int    `json:"code"`
+		Message string `json:"msg,omitempty"`
+		Hint    string `json:"hint,omitempty"`
+	}{}
+
+	if err := json.Unmarshal(data, &r); err != nil {
+		imp.failServer(c, err)
+		return ""
+	}
+
+	if r.Code > 0 {
+		c.AbortWithStatusJSON(code, r)
+		return ""
+	}
+
+	return r.Admin.MerchantID
+}
+
+func (imp *gatewayImp) admin(c *gin.Context) {
+	merchantID := imp.authAdmin(c)
 	if c.IsAborted() {
 		return
 	}
 	headers := []string{
-		"Fox-Member-Id", r.memberID,
-		"Fox-Merchant-Id", r.merchantID,
-		"Fox-Wallet-Id", r.walletID,
-		"Authorization", "Bearer " + r.token,
+		"Fox-Merchant-Id", merchantID,
 	}
 
 	service := c.Param("service")
-	prefix := "/member/" + service + "/p"
+	prefix := "/admin/" + service
 
 	method := c.Request.Method
 	uri := c.Request.URL.String()
