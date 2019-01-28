@@ -54,7 +54,9 @@ func main() {
 		Action: func(c *cli.Context) error {
 			r := gin.New()
 			r.Use(gin.Recovery())
-			r.Use(cors.Default())
+			config := cors.DefaultConfig()
+			config.AllowHeaders = append(config.AllowHeaders, "Fox-Merchannt-Id", "fox-cloud-merchant-id", "Authorization")
+			r.Use(cors.New(config))
 			r.Use(ginrus.Ginrus(log.StandardLogger(), time.RFC3339, true))
 
 			r.GET("/_hc", func(c *gin.Context) {
