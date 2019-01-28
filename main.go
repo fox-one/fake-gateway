@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/contrib/ginrus"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -53,6 +54,7 @@ func main() {
 		Action: func(c *cli.Context) error {
 			r := gin.New()
 			r.Use(gin.Recovery())
+			r.Use(cors.Default())
 			r.Use(ginrus.Ginrus(log.StandardLogger(), time.RFC3339, true))
 
 			r.GET("/_hc", func(c *gin.Context) {
