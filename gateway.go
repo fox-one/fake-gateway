@@ -215,15 +215,16 @@ func (imp *gatewayImp) loginRequired(pinRequired bool) gin.HandlerFunc {
 		prefix := "/member/" + service
 
 		if pinRequired {
-			prefix = "/pin"
+			prefix = prefix + "/pin"
 		} else {
-			prefix = "/u"
+			prefix = prefix + "/u"
 		}
 
 		method := c.Request.Method
 		uri := c.Request.URL.String()
 		body, _ := imp.extractBody(c)
 
+		log.Println(prefix, uri)
 		if strings.HasPrefix(uri, prefix) {
 			uri = uri[len(prefix):]
 		}
@@ -303,7 +304,7 @@ func (imp *gatewayImp) admin(c *gin.Context) {
 	}
 
 	service := c.Param("service")
-	prefix := "/admin/" + service
+	prefix := "/admin/" + service + "/u"
 
 	method := c.Request.Method
 	uri := c.Request.URL.String()
