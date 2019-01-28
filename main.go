@@ -57,7 +57,7 @@ func main() {
 			config := cors.DefaultConfig()
 			config.AllowAllOrigins = true
 			config.AllowCredentials = true
-			config.AddAllowHeaders("Fox-Merchannt-Id", "fox-cloud-merchant-id")
+			config.AddAllowHeaders("Fox-Merchant-Id", "fox-cloud-merchant-id", "Authorization")
 			r.Use(cors.New(config))
 			r.Use(ginrus.Ginrus(log.StandardLogger(), time.RFC3339, true))
 
