@@ -16,9 +16,10 @@ Fox-Wallet-ID: xxx
 业务方的请求将分为三种，公共接口，需要访问钱包信息的接口，以及需要进行转账操作的接口。根据不同的接口，分别将请求发送至:
 
 ```text
-/member/:service/p/*gw
-/member/:service/u/*gw
-/member/:service/pin/*gw
+/member/:service/p/*gw   # public
+/member/:service/u/*gw   # login required
+/member/:service/pin/*gw   # pin required
+/admin/:service/*gw        # no pin required & must admin login reuired
 ```
 
 其中service由FoxONE为业务分配。如otc, exchange等。
