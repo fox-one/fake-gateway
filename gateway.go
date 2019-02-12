@@ -1,21 +1,23 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strings"
 
-	"github.com/fox-one/mixin-sdk/utils"
+	"github.com/fox-one/gin-contrib/gin_helper"
+	"github.com/fox-one/httpclient"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
 
 type gatewayImp struct {
-	serviceHost string
 	gatewayHost string
+	gateway     *httpclient.Client
+	service     *httpclient.Client
 }
 
 // Token request token
@@ -37,23 +39,44 @@ func (imp *gatewayImp) failServer(c *gin.Context, errs ...error) {
 	c.AbortWithStatusJSON(http.StatusInternalServerError, resp)
 }
 
-func (imp *gatewayImp) request(ctx context.Context, method, url, body string, headers ...string) (int, []byte, error) {
-	log.Debugln(url, method, body, headers)
-	req, err := utils.NewRequest(url, method, body, headers...)
-	if err != nil {
-		log.Debugln("new request", err)
-		return 0, nil, err
+func (imp *gatewayImp) redirect(c *gin.Context, prefix string, headers ...string) {
+	method := c.Request.Method
+	uri := c.Request.URL.String()
+	body, _ := imp.extractBody(c)
+
+	if strings.HasPrefix(uri, prefix) {
+		uri = uri[len(prefix):]
 	}
 
-	req = req.WithContext(ctx)
-	resp, err := utils.DoRequest(req)
-	if err != nil && (resp == nil || resp.Body == nil) {
-		log.Debugln("do request", err)
-		return 0, nil, err
+	{
+		// TODO remove
+		if strings.HasSuffix(uri, "/gw") {
+			uri = uri[:len(uri)-3]
+		} else if idx := strings.Index(uri, "/gw?"); idx >= 0 {
+			uri = uri[:idx] + uri[idx+3:]
+		}
 	}
-	data, err := utils.ReadResponse(resp)
-	log.Debugln(string(data))
-	return resp.StatusCode, data, err
+
+	log.Debugln("do redirect", method, uri)
+
+	req, err := http.NewRequest(method, uri, ioutil.NopCloser(bytes.NewReader(body)))
+	if err != nil {
+		gin_helper.FailServer(c, err)
+		return
+	}
+
+	for i := 0; i < len(headers)-1; i += 2 {
+		c.Request.Header.Set(headers[i], headers[i+1])
+	}
+
+	for k, v := range c.Request.Header {
+		req.Header[k] = v
+	}
+
+	if err := imp.service.Redirect(c.Request.Context(), req, c.Writer); err != nil {
+		gin_helper.FailServer(c, err)
+		return
+	}
 }
 
 func (imp *gatewayImp) extractBody(c *gin.Context) (body []byte, err error) {
@@ -83,19 +106,25 @@ func (imp *gatewayImp) authMember(c *gin.Context) string {
 		return ""
 	}
 
-	body, _ := imp.extractBody(c)
-	params, err := json.Marshal(map[string]interface{}{
-		"method": c.Request.Method,
-		"uri":    c.Request.URL.String(),
-		"body":   string(body),
-		"token":  auth[7:],
-	})
+	body, err := imp.extractBody(c)
 	if err != nil {
 		imp.failServer(c, err)
 		return ""
 	}
 
-	code, data, err := imp.request(c, "POST", imp.gatewayHost+"/member/validate", string(params))
+	resp := imp.gateway.POST("/member/validate").
+		P("method", c.Request.Method).
+		P("uri", c.Request.URL.String()).
+		P("body", string(body)).
+		P("token", auth[7:]).
+		Do(c.Request.Context())
+
+	if err := resp.Err(); err != nil {
+		imp.failServer(c, err)
+		return ""
+	}
+
+	data, err := resp.Bytes()
 	if err != nil {
 		imp.failServer(c, err)
 		return ""
@@ -115,6 +144,7 @@ func (imp *gatewayImp) authMember(c *gin.Context) string {
 	}
 
 	if r.Code > 0 {
+		code, _ := resp.Status()
 		c.AbortWithStatusJSON(code, r)
 		return ""
 	}
@@ -133,7 +163,15 @@ func (imp *gatewayImp) auth(c *gin.Context) *Token {
 		return nil
 	}
 
-	code, data, err := imp.request(c, "GET", fmt.Sprintf("%s/dev/member/%s/auth", imp.gatewayHost, memberID), "")
+	resp := imp.gateway.GET(fmt.Sprintf("/dev/member/%s/auth", memberID)).
+		Do(c.Request.Context())
+
+	if err := resp.Err(); err != nil {
+		imp.failServer(c, err)
+		return nil
+	}
+
+	data, err := resp.Bytes()
 	if err != nil {
 		imp.failServer(c, err)
 		return nil
@@ -155,6 +193,7 @@ func (imp *gatewayImp) auth(c *gin.Context) *Token {
 	}
 
 	if r.Code > 0 {
+		code, _ := resp.Status()
 		c.AbortWithStatusJSON(code, r)
 		return nil
 	}
@@ -169,33 +208,13 @@ func (imp *gatewayImp) auth(c *gin.Context) *Token {
 
 func (imp *gatewayImp) public(c *gin.Context) {
 	service := c.Param("service")
-	prefix := "/member/" + service + "/p"
+	imp.redirect(c, "/p/"+service)
+}
 
-	headers := []string{}
-
-	if merchantID := c.GetHeader("Fox-Merchant-Id"); len(merchantID) > 0 {
-		headers = append(headers, "Fox-Merchant-Id", merchantID)
-	}
-
-	method := c.Request.Method
-	uri := c.Request.URL.String()
-	body, _ := imp.extractBody(c)
-
-	if strings.HasPrefix(uri, prefix) {
-		uri = uri[len(prefix):]
-	}
-	if strings.HasSuffix(uri, "/gw") {
-		uri = uri[:len(uri)-3]
-	}
-
-	code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body), headers...)
-	if err != nil {
-		imp.failServer(c, err)
-		return
-	}
-
-	c.Writer.Write(data)
-	c.Writer.WriteHeader(code)
+// TODO deprecated
+func (imp *gatewayImp) publicDeprecated(c *gin.Context) {
+	service := c.Param("service")
+	imp.redirect(c, "/member/"+service+"/p")
 }
 
 func (imp *gatewayImp) loginRequired(pinRequired bool) gin.HandlerFunc {
@@ -220,26 +239,7 @@ func (imp *gatewayImp) loginRequired(pinRequired bool) gin.HandlerFunc {
 			prefix = prefix + "/u"
 		}
 
-		method := c.Request.Method
-		uri := c.Request.URL.String()
-		body, _ := imp.extractBody(c)
-
-		log.Println(prefix, uri)
-		if strings.HasPrefix(uri, prefix) {
-			uri = uri[len(prefix):]
-		}
-		if strings.HasSuffix(uri, "/gw") {
-			uri = uri[:len(uri)-3]
-		}
-
-		code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body), headers...)
-		if err != nil {
-			imp.failServer(c, err)
-			return
-		}
-
-		c.Writer.WriteHeader(code)
-		c.Writer.Write(data)
+		imp.redirect(c, prefix, headers...)
 	}
 }
 
@@ -254,18 +254,20 @@ func (imp *gatewayImp) authAdmin(c *gin.Context) string {
 	}
 
 	body, _ := imp.extractBody(c)
-	params, err := json.Marshal(map[string]interface{}{
-		"method": c.Request.Method,
-		"uri":    c.Request.URL.String(),
-		"body":   string(body),
-		"token":  auth[7:],
-	})
-	if err != nil {
+
+	resp := imp.gateway.POST("/admin/validate").
+		P("method", c.Request.Method).
+		P("uri", c.Request.URL.String()).
+		P("body", string(body)).
+		P("token", auth[7:]).
+		Do(c.Request.Context())
+
+	if err := resp.Err(); err != nil {
 		imp.failServer(c, err)
 		return ""
 	}
 
-	code, data, err := imp.request(c, "POST", imp.gatewayHost+"/admin/validate", string(params))
+	data, err := resp.Bytes()
 	if err != nil {
 		imp.failServer(c, err)
 		return ""
@@ -287,6 +289,7 @@ func (imp *gatewayImp) authAdmin(c *gin.Context) string {
 	}
 
 	if r.Code > 0 {
+		code, _ := resp.Status()
 		c.AbortWithStatusJSON(code, r)
 		return ""
 	}
@@ -306,23 +309,5 @@ func (imp *gatewayImp) admin(c *gin.Context) {
 	service := c.Param("service")
 	prefix := "/admin/" + service + "/u"
 
-	method := c.Request.Method
-	uri := c.Request.URL.String()
-	body, _ := imp.extractBody(c)
-
-	if strings.HasPrefix(uri, prefix) {
-		uri = uri[len(prefix):]
-	}
-	if strings.HasSuffix(uri, "/gw") {
-		uri = uri[:len(uri)-3]
-	}
-
-	code, data, err := imp.request(c, method, imp.serviceHost+uri, string(body), headers...)
-	if err != nil {
-		imp.failServer(c, err)
-		return
-	}
-
-	c.Writer.WriteHeader(code)
-	c.Writer.Write(data)
+	imp.redirect(c, prefix, headers...)
 }

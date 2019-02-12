@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/fox-one/httpclient"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/contrib/ginrus"
 	"github.com/gin-gonic/gin"
@@ -66,11 +67,11 @@ func main() {
 			})
 
 			imp := gatewayImp{
-				gatewayHost: "https://dev-gateway.fox.one",
-				serviceHost: c.String("service_host"),
+				gateway: httpclient.NewClient("https://dev-gateway.fox.one"),
+				service: httpclient.NewClient(c.String("service_host")),
 			}
 			r.Any("/p/:service/*any", imp.public)
-			r.Any("/member/:service/p/*any", imp.public)
+			r.Any("/member/:service/p/*any", imp.publicDeprecated)
 			r.Any("/member/:service/u/*any", imp.loginRequired(false))
 			r.Any("/member/:service/pin/*any", imp.loginRequired(true))
 			r.Any("/admin/:service/u/*any", imp.admin)
