@@ -13,7 +13,7 @@ Fox-Member-ID: xxx
 Fox-Wallet-ID: xxx
 ```
 
-业务方的请求将分为三种，公共接口，需要访问钱包信息的接口，以及需要进行转账操作的接口。根据不同的接口，分别将请求发送至:
+业务方的请求将分为四种，公共接口，需要访问钱包信息的接口，需要进行转账操作的接口，以及管理员接口。根据不同的接口，分别将请求发送至:
 
 ```text
 /member/:service/p/*gw   # public
@@ -31,3 +31,8 @@ cd fake_gateway
 go build
 ./fake_gateway --debug api -p 8081 -s http://locahost:8111
 ```
+
+## Updates
+
+- 所有转发接口不再以 /gw 结尾
+- public接口更新为 /p/:service/*

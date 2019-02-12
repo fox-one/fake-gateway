@@ -69,10 +69,11 @@ func main() {
 				gatewayHost: "https://dev-gateway.fox.one",
 				serviceHost: c.String("service_host"),
 			}
-			r.Any("/member/:service/p/*gw", imp.public)
-			r.Any("/member/:service/u/*gw", imp.loginRequired(false))
-			r.Any("/member/:service/pin/*gw", imp.loginRequired(true))
-			r.Any("/admin/:service/u/*gw", imp.admin)
+			r.Any("/p/:service/*any", imp.public)
+			r.Any("/member/:service/p/*any", imp.public)
+			r.Any("/member/:service/u/*any", imp.loginRequired(false))
+			r.Any("/member/:service/pin/*any", imp.loginRequired(true))
+			r.Any("/admin/:service/u/*any", imp.admin)
 
 			addr := fmt.Sprintf(":%d", c.Int("port"))
 			return r.Run(addr)
