@@ -22,10 +22,11 @@ type gatewayImp struct {
 
 // Token request token
 type Token struct {
-	memberID   string
-	walletID   string
-	merchantID string
-	token      string
+	memberID       string
+	walletID       string
+	merchantWallet string
+	merchantID     string
+	token          string
 }
 
 func (imp *gatewayImp) failServer(c *gin.Context, errs ...error) {
@@ -178,9 +179,10 @@ func (imp *gatewayImp) auth(c *gin.Context) *Token {
 	}
 
 	var r = struct {
-		WalletID   string `json:"wallet_id,omitempty"`
-		MerchantID string `json:"merchant_id,omitempty"`
-		Token      string `json:"token,omitempty"`
+		WalletID       string `json:"wallet_id,omitempty"`
+		MerchantID     string `json:"merchant_id,omitempty"`
+		MerchantWallet string `json:"merchant_wallet_id,omitempty"`
+		Token          string `json:"token,omitempty"`
 
 		Code    int    `json:"code"`
 		Message string `json:"msg,omitempty"`
@@ -199,10 +201,11 @@ func (imp *gatewayImp) auth(c *gin.Context) *Token {
 	}
 
 	return &Token{
-		walletID:   r.WalletID,
-		merchantID: r.MerchantID,
-		token:      r.Token,
-		memberID:   memberID,
+		walletID:       r.WalletID,
+		merchantID:     r.MerchantID,
+		merchantWallet: r.MerchantWallet,
+		token:          r.Token,
+		memberID:       memberID,
 	}
 }
 
@@ -226,6 +229,7 @@ func (imp *gatewayImp) loginRequired(pinRequired bool) gin.HandlerFunc {
 		headers := []string{
 			"Fox-Member-Id", r.memberID,
 			"Fox-Merchant-Id", r.merchantID,
+			"Fox-Merchant-Wallet-Id", r.merchantWallet,
 			"Fox-Wallet-Id", r.walletID,
 			"Authorization", "Bearer " + r.token,
 		}
